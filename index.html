@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PIONEER // ARC Raiders Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080b0f; --surface: #0d1117; --surface2: #111820;
+    --border: #1e2d3d; --border-bright: #2a4060;
+    --accent: #00e5ff; --accent2: #ff6b35; --accent3: #7fff7f;
+    --text: #c8d8e8; --text-dim: #5a7a9a; --text-bright: #eef5ff;
+    --danger: #ff4444; --warn: #ffaa00; --success: #00ff88;
+    --mono: 'Share Tech Mono', monospace;
+    --display: 'Barlow Condensed', sans-serif;
+    --body: 'Barlow', sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--body); min-height:100vh; overflow-x:hidden; }
+  body::before { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px); pointer-events:none; z-index:999; }
+  body::after { content:''; position:fixed; inset:0; background-image:linear-gradient(rgba(0,229,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.025) 1px,transparent 1px); background-size:40px 40px; pointer-events:none; z-index:0; }
+
+  header { position:relative; z-index:10; display:flex; align-items:center; justify-content:space-between; padding:16px 32px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,rgba(0,229,255,0.04) 0%,transparent 100%); }
+  .logo { display:flex; align-items:baseline; gap:12px; }
+  .logo-main { font-family:var(--display); font-weight:900; font-size:26px; letter-spacing:0.15em; color:var(--accent); text-shadow:0 0 20px rgba(0,229,255,0.4); }
+  .logo-sub { font-family:var(--mono); font-size:10px; color:var(--text-dim); letter-spacing:0.3em; }
+  .header-right { display:flex; align-items:center; gap:16px; }
+  .user-info { font-family:var(--mono); font-size:11px; color:var(--text-dim); text-align:right; }
+  .user-info span { color:var(--accent3); display:block; font-size:13px; }
+
+  .btn { font-family:var(--display); font-weight:700; font-size:12px; letter-spacing:0.2em; text-transform:uppercase; padding:8px 20px; border:none; cursor:pointer; transition:all 0.2s; }
+  .btn-primary { background:var(--accent); color:var(--bg); clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
+  .btn-primary:hover { background:#33eeff; box-shadow:0 0 20px rgba(0,229,255,0.35); }
+  .btn-danger { background:rgba(255,68,68,0.15); color:var(--danger); border:1px solid var(--danger); }
+  .btn-danger:hover { background:rgba(255,68,68,0.25); }
+  .btn-sm { font-family:var(--display); font-weight:600; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; padding:5px 12px; background:var(--surface2); border:1px solid var(--border); color:var(--text-dim); cursor:pointer; transition:all 0.2s; }
+  .btn-sm:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* ── LOGIN SCREEN ── */
+  #loginScreen { position:relative; z-index:10; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:calc(100vh - 65px); padding:40px 20px; }
+  .login-box { width:100%; max-width:480px; }
+  .login-title { font-family:var(--display); font-weight:900; font-size:48px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-bright); line-height:1; margin-bottom:8px; }
+  .login-sub { font-family:var(--mono); font-size:11px; color:var(--text-dim); letter-spacing:0.3em; margin-bottom:40px; }
+  .login-sub span { color:var(--accent2); }
+  .platform-buttons { display:flex; flex-direction:column; gap:12px; }
+  .platform-btn { display:flex; align-items:center; gap:16px; padding:16px 20px; background:var(--surface); border:1px solid var(--border); color:var(--text); font-family:var(--display); font-weight:700; font-size:14px; letter-spacing:0.2em; text-transform:uppercase; cursor:pointer; text-decoration:none; transition:all 0.2s; position:relative; overflow:hidden; }
+  .platform-btn::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--platform-color, var(--accent)); }
+  .platform-btn:hover { border-color:var(--platform-color, var(--accent)); background:var(--surface2); transform:translateX(4px); }
+  .platform-btn .platform-icon { font-size:20px; }
+  .platform-btn .platform-arrow { margin-left:auto; color:var(--text-dim); font-family:var(--mono); font-size:12px; }
+  .steam-btn { --platform-color: #1b9fcf; }
+  .epic-btn { --platform-color: #00d9ff; }
+  .xbox-btn { --platform-color: #52b043; }
+  .psn-btn { --platform-color: #003791; }
+  .embark-btn { --platform-color: #ff6b35; }
+  .login-note { margin-top:24px; font-family:var(--mono); font-size:10px; color:var(--text-dim); text-align:center; line-height:1.8; }
+
+  /* ── DASHBOARD ── */
+  #dashboard { position:relative; z-index:10; display:none; }
+  .container { max-width:1200px; margin:0 auto; padding:28px 24px; }
+
+  .cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px; margin-bottom:24px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); padding:20px; position:relative; overflow:hidden; }
+  .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--accent),transparent); }
+  .stat-label { font-family:var(--mono); font-size:10px; color:var(--text-dim); letter-spacing:0.2em; text-transform:uppercase; margin-bottom:8px; }
+  .stat-value { font-family:var(--display); font-weight:700; font-size:28px; color:var(--text-bright); line-height:1; }
+  .stat-value.accent { color:var(--accent); }
+  .stat-value.orange { color:var(--accent2); }
+  .stat-value.green { color:var(--accent3); }
+  .stat-sub { font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-top:6px; }
+
+  .section-label { font-family:var(--display); font-size:11px; font-weight:600; letter-spacing:0.4em; color:var(--accent); text-transform:uppercase; margin-bottom:14px; display:flex; align-items:center; gap:10px; }
+  .section-label::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--border-bright),transparent); }
+
+  .tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:20px; }
+  .tab { font-family:var(--display); font-weight:700; font-size:11px; letter-spacing:0.3em; text-transform:uppercase; padding:10px 18px; background:none; border:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; transition:all 0.2s; margin-bottom:-1px; }
+  .tab:hover { color:var(--text); }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+
+  .data-table-wrap { background:var(--surface); border:1px solid var(--border); overflow:hidden; }
+  .table-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--border); background:var(--surface2); }
+  .table-title { font-family:var(--display); font-weight:700; font-size:12px; letter-spacing:0.25em; text-transform:uppercase; color:var(--text-bright); }
+  .data-table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:11px; }
+  .data-table th { text-align:left; padding:9px 14px; font-size:9px; letter-spacing:0.25em; color:var(--text-dim); border-bottom:1px solid var(--border); background:var(--surface2); font-weight:400; text-transform:uppercase; }
+  .data-table td { padding:9px 14px; border-bottom:1px solid rgba(30,45,61,0.4); color:var(--text); vertical-align:middle; }
+  .data-table tr:last-child td { border-bottom:none; }
+  .data-table tr:hover td { background:rgba(0,229,255,0.02); }
+
+  .rarity-badge { font-family:var(--display); font-weight:700; font-size:9px; letter-spacing:0.15em; padding:2px 7px; text-transform:uppercase; }
+  .rarity-common { background:rgba(100,100,100,0.25); color:#aaa; border:1px solid #444; }
+  .rarity-uncommon { background:rgba(0,200,100,0.12); color:#4dff9a; border:1px solid #00cc66; }
+  .rarity-rare { background:rgba(0,100,255,0.18); color:#66aaff; border:1px solid #3366ff; }
+  .rarity-epic { background:rgba(150,0,255,0.18); color:#cc77ff; border:1px solid #9933ff; }
+  .rarity-legendary { background:rgba(255,150,0,0.18); color:#ffaa33; border:1px solid #ff8800; }
+
+  .search-input { background:var(--surface2); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:11px; padding:7px 12px; outline:none; width:200px; }
+  .search-input:focus { border-color:var(--accent); }
+
+  .raw-output { background:#050810; border:1px solid var(--border); font-family:var(--mono); font-size:11px; color:#7ef77e; padding:16px; max-height:450px; overflow:auto; white-space:pre; line-height:1.6; }
+
+  .empty-state { text-align:center; padding:60px 20px; color:var(--text-dim); }
+  .empty-state .icon { font-size:40px; margin-bottom:14px; opacity:0.25; }
+  .empty-state h3 { font-family:var(--display); font-weight:700; font-size:16px; letter-spacing:0.2em; text-transform:uppercase; margin-bottom:8px; color:var(--text); }
+  .empty-state p { font-size:12px; line-height:1.6; }
+
+  .spinner { display:inline-block; width:12px; height:12px; border:2px solid rgba(0,229,255,0.2); border-top-color:var(--accent); border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; margin-right:5px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .toast { position:fixed; top:18px; right:18px; background:var(--surface); border:1px solid var(--accent); color:var(--accent); font-family:var(--mono); font-size:11px; padding:10px 18px; z-index:9999; transform:translateX(130%); transition:transform 0.3s ease; }
+  .toast.show { transform:translateX(0); }
+  .toast.error { border-color:var(--danger); color:var(--danger); }
+  .toast.success { border-color:var(--success); color:var(--success); }
+
+  .error-banner { background:rgba(255,68,68,0.08); border:1px solid rgba(255,68,68,0.3); border-left:3px solid var(--danger); padding:12px 16px; font-family:var(--mono); font-size:11px; color:var(--danger); margin-bottom:16px; display:none; }
+
+  .platform-tag { font-family:var(--mono); font-size:9px; padding:2px 7px; border-radius:0; text-transform:uppercase; letter-spacing:0.1em; }
+  .tag-steam { background:rgba(27,159,207,0.2); color:#1b9fcf; border:1px solid #1b9fcf; }
+  .tag-epic { background:rgba(0,217,255,0.15); color:#00d9ff; border:1px solid #00d9ff; }
+  .tag-xbox { background:rgba(82,176,67,0.2); color:#52b043; border:1px solid #52b043; }
+  .tag-playstation { background:rgba(0,55,145,0.3); color:#6699ff; border:1px solid #003791; }
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<header>
+  <div class="logo">
+    <span class="logo-main">PIONEER</span>
+    <span class="logo-sub">// ARC RAIDERS</span>
+  </div>
+  <div class="header-right">
+    <div class="user-info" id="headerUser" style="display:none">
+      <span id="headerName">—</span>
+      <div id="headerPlatform"></div>
+    </div>
+    <button class="btn btn-danger" id="logoutBtn" style="display:none" onclick="logout()">LOGOUT</button>
+  </div>
+</header>
+
+<!-- ── LOGIN SCREEN ── -->
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-title">ARC<br>RAIDERS</div>
+    <div class="login-sub">PIONEER DASHBOARD // <span>SELECT PLATFORM</span></div>
+    <div id="errorBanner" class="error-banner"></div>
+    <div class="platform-buttons">
+      <a class="platform-btn steam-btn" href="/auth/steam">
+        <span class="platform-icon">🎮</span>
+        <span>Continue with Steam</span>
+        <span class="platform-arrow">→</span>
+      </a>
+      <a class="platform-btn epic-btn" href="/auth/epic">
+        <span class="platform-icon">⚡</span>
+        <span>Continue with Epic Games</span>
+        <span class="platform-arrow">→</span>
+      </a>
+      <a class="platform-btn xbox-btn" href="/auth/xbox">
+        <span class="platform-icon">🎯</span>
+        <span>Continue with Xbox</span>
+        <span class="platform-arrow">→</span>
+      </a>
+      <a class="platform-btn psn-btn" href="/auth/psn">
+        <span class="platform-icon">🕹️</span>
+        <span>Continue with PlayStation</span>
+        <span class="platform-arrow">→</span>
+      </a>
+    </div>
+    <div class="login-note">
+      Your game token is obtained via official OAuth and stored server-side.<br>
+      It never touches your browser or clipboard.
+    </div>
+  </div>
+</div>
+
+<!-- ── DASHBOARD ── -->
+<div id="dashboard">
+  <div class="container">
+
+    <div class="cards-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-label">Embark ID</div>
+        <div class="stat-value accent" id="statEmbarkId" style="font-size:16px;word-break:break-all">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Platform</div>
+        <div class="stat-value" id="statPlatform">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Items</div>
+        <div class="stat-value accent" id="statTotal">—</div>
+        <div class="stat-sub">in inventory</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Unique Types</div>
+        <div class="stat-value" id="statUnique">—</div>
+        <div class="stat-sub">item definitions</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('inventory',this)">INVENTORY</button>
+      <button class="tab" onclick="switchTab('raw',this)">RAW API</button>
+    </div>
+
+    <!-- INVENTORY TAB -->
+    <div id="tab-inventory" class="tab-panel active">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" id="fetchBtn" onclick="fetchInventory()" style="height:34px;padding:0 18px;font-size:11px">SYNC INVENTORY</button>
+          <button class="btn-sm" onclick="exportJSON()">EXPORT JSON</button>
+        </div>
+        <input type="text" class="search-input" id="invSearch" placeholder="Search..." oninput="filterInventory()">
+      </div>
+
+      <div id="invTableWrap" class="data-table-wrap" style="display:none">
+        <div class="table-header">
+          <span class="table-title">INVENTORY</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)" id="invCount"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr><th>#</th><th>Item ID</th><th>Definition</th><th>Type</th><th>Rarity</th><th>Qty</th></tr>
+            </thead>
+            <tbody id="invTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="invEmpty" class="empty-state">
+        <div class="icon">⬡</div>
+        <h3>Inventory Not Synced</h3>
+        <p>Hit SYNC INVENTORY to load your ARC Raiders data.</p>
+      </div>
+    </div>
+
+    <!-- RAW API TAB -->
+    <div id="tab-raw" class="tab-panel">
+      <div class="section-label">Custom Request</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <select id="rawMethod" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:7px 10px;outline:none">
+          <option>GET</option><option>POST</option>
+        </select>
+        <select id="rawPath" style="flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:7px 10px;outline:none">
+          <option value="/inventory">GET /inventory</option>
+          <option value="/inventory/v1/mutate">POST /inventory/v1/mutate</option>
+          <option value="/offers/accept">POST /offers/accept</option>
+          <option value="/inventory/upgrade">POST /inventory/upgrade</option>
+        </select>
+        <button class="btn btn-primary" onclick="sendRaw()" style="height:34px;padding:0 18px;font-size:11px">SEND</button>
+        <button class="btn-sm" onclick="copyRaw()">COPY</button>
+      </div>
+      <textarea id="rawBody" style="width:100%;height:80px;background:var(--surface2);border:1px solid var(--border);color:var(--accent3);font-family:var(--mono);font-size:11px;padding:10px;outline:none;resize:vertical;margin-bottom:12px" placeholder="POST body (JSON)..."></textarea>
+      <div id="rawOutput" class="raw-output">// Response will appear here...</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let inventoryData  = null;
+let inventoryFlat  = [];
+
+// ── INIT ─────────────────────────────────────────────────────
+window.addEventListener('load', async () => {
+  // Check URL params for auth result
+  const params = new URLSearchParams(location.search);
+  if (params.get('auth') === 'success') {
+    showToast('Authenticated successfully ✓', 'success');
+    history.replaceState({}, '', '/');
+  }
+  if (params.get('error')) {
+    const detail = params.get('detail') || '';
+    showError(`Auth error: ${params.get('error')}${detail ? ' — ' + detail : ''}`);
+    history.replaceState({}, '', '/');
+  }
+
+  // Check if already logged in
+  try {
+    const resp = await fetch('/me', { credentials: 'include' });
+    if (resp.ok) {
+      const user = await resp.json();
+      showDashboard(user);
+    }
+  } catch {}
+});
+
+function showDashboard(user) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById('headerUser').style.display = 'block';
+  document.getElementById('logoutBtn').style.display = 'block';
+  document.getElementById('headerName').textContent = user.displayName || 'Player';
+  document.getElementById('headerPlatform').innerHTML = `<span class="platform-tag tag-${user.platform}">${user.platform}</span>`;
+  document.getElementById('statEmbarkId').textContent = user.embarkId || 'Pending';
+  document.getElementById('statPlatform').textContent = (user.platform || '—').toUpperCase();
+}
+
+async function logout() {
+  await fetch('/logout', { method: 'POST', credentials: 'include' });
+  location.reload();
+}
+
+// ── INVENTORY ────────────────────────────────────────────────
+async function fetchInventory() {
+  const btn = document.getElementById('fetchBtn');
+  btn.innerHTML = '<span class="spinner"></span>SYNCING...';
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/inventory', { credentials: 'include' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    inventoryData = await resp.json();
+    inventoryFlat = flattenInventory(inventoryData);
+    renderInventory(inventoryFlat);
+    updateStats(inventoryFlat);
+    showToast(`Loaded ${inventoryFlat.length} items ✓`, 'success');
+  } catch(e) {
+    showToast('Sync failed: ' + e.message, 'error');
+  } finally {
+    btn.innerHTML = 'SYNC INVENTORY';
+    btn.disabled = false;
+  }
+}
+
+function flattenInventory(data) {
+  if (Array.isArray(data)) return data;
+  if (data?.items && Array.isArray(data.items)) return data.items;
+  if (data?.inventory) {
+    const inv = data.inventory;
+    if (Array.isArray(inv)) return inv;
+    return Object.entries(inv).map(([k, v]) => ({ id: k, ...(typeof v === 'object' ? v : { value: v }) }));
+  }
+  return Object.entries(data).map(([k, v]) => ({ id: k, ...(typeof v === 'object' ? v : { value: v }) }));
+}
+
+function getRarity(item) {
+  const str = JSON.stringify(item).toLowerCase();
+  for (const r of ['legendary','epic','rare','uncommon']) if (str.includes(r)) return r;
+  return 'common';
+}
+
+function updateStats(items) {
+  document.getElementById('statTotal').textContent = items.length;
+  const unique = new Set(items.map(i => i.definition_id || i.defId || i.item_id || '')).size;
+  document.getElementById('statUnique').textContent = unique;
+}
+
+function renderInventory(items) {
+  document.getElementById('invEmpty').style.display = 'none';
+  document.getElementById('invTableWrap').style.display = 'block';
+  document.getElementById('invCount').textContent = items.length + ' items';
+  const tbody = document.getElementById('invTableBody');
+  tbody.innerHTML = items.slice(0, 500).map((item, i) => {
+    const rarity = getRarity(item);
+    const id     = String(item.id || item.item_id || '—');
+    const defId  = String(item.definition_id || item.defId || item.def || '—');
+    const type   = item.type || item.category || '—';
+    const qty    = item.quantity || item.amount || 1;
+    return `<tr>
+      <td style="color:var(--text-dim)">${i+1}</td>
+      <td style="color:var(--accent);font-size:10px" title="${id}">${id.length > 14 ? id.slice(0,13)+'…' : id}</td>
+      <td style="color:var(--text-bright)" title="${defId}">${defId.length > 22 ? defId.slice(0,20)+'…' : defId}</td>
+      <td style="color:var(--text-dim)">${type}</td>
+      <td><span class="rarity-badge rarity-${rarity}">${rarity}</span></td>
+      <td style="color:var(--accent2)">${qty}</td>
+    </tr>`;
+  }).join('');
+  if (items.length > 500) tbody.innerHTML += `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:14px;font-family:var(--mono);font-size:10px">… ${items.length-500} more — export JSON for full data</td></tr>`;
+}
+
+function filterInventory() {
+  if (!inventoryData) return;
+  const q = document.getElementById('invSearch').value.toLowerCase();
+  renderInventory(q ? inventoryFlat.filter(i => JSON.stringify(i).toLowerCase().includes(q)) : inventoryFlat);
+}
+
+function exportJSON() {
+  if (!inventoryData) return showToast('No data to export', 'error');
+  const blob = new Blob([JSON.stringify(inventoryData, null, 2)], { type:'application/json' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `pioneer-inventory-${Date.now()}.json` });
+  a.click();
+}
+
+// ── RAW API ──────────────────────────────────────────────────
+async function sendRaw() {
+  const method = document.getElementById('rawMethod').value;
+  const path   = document.getElementById('rawPath').value;
+  const bodyTx = document.getElementById('rawBody').value.trim();
+  const out    = document.getElementById('rawOutput');
+  out.textContent = '// Sending...';
+
+  const opts = { method, credentials: 'include', headers: {} };
+  if (method === 'POST' && bodyTx) {
+    try { opts.body = bodyTx; opts.headers['Content-Type'] = 'application/json'; }
+    catch { return showToast('Invalid JSON', 'error'); }
+  }
+
+  try {
+    const resp = await fetch('/api' + path, opts);
+    const data = await resp.json();
+    out.textContent = JSON.stringify(data, null, 2);
+  } catch(e) {
+    out.textContent = '// ERROR: ' + e.message;
+  }
+}
+
+function copyRaw() {
+  navigator.clipboard.writeText(document.getElementById('rawOutput').textContent)
+    .then(() => showToast('Copied ✓', 'success'));
+}
+
+// ── TABS ─────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── UI HELPERS ───────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBanner');
+  el.textContent = msg; el.style.display = 'block';
+}
+</script>
+</body>
+</html>
