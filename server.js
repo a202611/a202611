@@ -1,24 +1,25 @@
 require('dotenv').config();
-const express = require('express');
-const session = require('express-session');
-const cors = require('cors');
+const express      = require('express');
+const session      = require('express-session');
+const cors         = require('cors');
 const cookieParser = require('cookie-parser');
-const path = require('path');
+const path         = require('path');
 
-const steamRouter = require('./routes/steam');
-const epicRouter  = require('./routes/epic');
-const xboxRouter  = require('./routes/xbox');
-const psnRouter   = require('./routes/psn');
-const apiRouter   = require('./routes/api');
+// Flat imports — all files are at repo root
+const steamRouter = require('./steam');
+const epicRouter  = require('./epic');
+const xboxRouter  = require('./xbox');
+const psnRouter   = require('./psn');
+const apiRouter   = require('./api');
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ── MIDDLEWARE ───────────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(cors({ origin: process.env.BASE_URL, credentials: true }));
+app.use(cors({ origin: true, credentials: true }));
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
@@ -27,12 +28,12 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
-  }
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  },
 }));
 
-// ── STATIC FRONTEND ─────────────────────────────────────────
-app.use(express.static(path.join(__dirname, '../public')));
+// ── STATIC FRONTEND (serves index.html) ─────────────────────
+app.use(express.static(path.join(__dirname)));
 
 // ── AUTH ROUTES ──────────────────────────────────────────────
 app.use('/auth/steam', steamRouter);
@@ -40,16 +41,16 @@ app.use('/auth/epic',  epicRouter);
 app.use('/auth/xbox',  xboxRouter);
 app.use('/auth/psn',   psnRouter);
 
-// ── PIONEER API PROXY ────────────────────────────────────────
+// ── PIONEER API PROXY ─────────────────────────────────────────
 app.use('/api', apiRouter);
 
-// ── SESSION STATUS (frontend polls this) ────────────────────
-app.get('/me', requireAuth, async (req, res) => {
+// ── SESSION STATUS ───────────────────────────────────────────
+app.get('/me', requireAuth, (req, res) => {
   res.json({
-    loggedIn: true,
-    userId:   req.session.userId,
-    platform: req.session.platform,
-    embarkId: req.session.embarkId,
+    loggedIn:    true,
+    userId:      req.session.userId,
+    platform:    req.session.platform,
+    embarkId:    req.session.embarkId,
     displayName: req.session.displayName,
   });
 });
@@ -60,20 +61,24 @@ app.post('/logout', (req, res) => {
 });
 
 // ── HEALTH ───────────────────────────────────────────────────
-app.get('/health', (req, res) => res.json({ status: 'ok', ts: Date.now() }));
+app.get('/health', (_req, res) => res.json({ status: 'ok', ts: Date.now() }));
 
-// ── MIDDLEWARE EXPORT ────────────────────────────────────────
+// ── CATCH-ALL → index.html ───────────────────────────────────
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// ── AUTH MIDDLEWARE (exported for use in api.js) ─────────────
 function requireAuth(req, res, next) {
-  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
+  if (!req.session?.userId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
   next();
 }
 
 module.exports = { requireAuth };
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 Pioneer Auth running on http://localhost:${PORT}`);
-  console.log(`   Steam  → ${process.env.BASE_URL}/auth/steam`);
-  console.log(`   Epic   → ${process.env.BASE_URL}/auth/epic`);
-  console.log(`   Xbox   → ${process.env.BASE_URL}/auth/xbox`);
-  console.log(`   PSN    → ${process.env.BASE_URL}/auth/psn\n`);
+  console.log(`\n🚀 Pioneer Auth running on port ${PORT}`);
+  console.log(`   BASE_URL: ${process.env.BASE_URL || 'http://localhost:' + PORT}`);
 });

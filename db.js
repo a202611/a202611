@@ -2,27 +2,22 @@ const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY  // service_role — bypasses RLS for backend writes
+  process.env.SUPABASE_SERVICE_KEY
 );
 
-/**
- * Upsert a user record and store their Pioneer token.
- * Returns the internal user row.
- */
 async function upsertUser({ platformId, platform, displayName, pioneerToken, tokenExpiresAt, embarkId }) {
   const { data, error } = await supabase
     .from('users')
     .upsert({
-      platform_id:       platformId,
-      platform:          platform,
-      display_name:      displayName,
-      pioneer_token:     pioneerToken,
-      token_expires_at:  tokenExpiresAt,
-      embark_id:         embarkId,
-      updated_at:        new Date().toISOString(),
+      platform_id:      platformId,
+      platform:         platform,
+      display_name:     displayName,
+      pioneer_token:    pioneerToken,
+      token_expires_at: tokenExpiresAt,
+      embark_id:        embarkId,
+      updated_at:       new Date().toISOString(),
     }, {
       onConflict: 'platform_id,platform',
-      returning: 'representation',
     })
     .select()
     .single();
@@ -31,9 +26,6 @@ async function upsertUser({ platformId, platform, displayName, pioneerToken, tok
   return data;
 }
 
-/**
- * Get a user's stored Pioneer token (refresh if needed).
- */
 async function getUserToken(userId) {
   const { data, error } = await supabase
     .from('users')
