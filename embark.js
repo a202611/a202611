@@ -27,17 +27,31 @@ async function exchangeForPioneerToken(providerName, providerToken, nickname = '
     client_secret:           EMBARK_SECRET,
   });
 
-  const response = await axios.post(EMBARK_AUTH_URL, params.toString(), {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent':   'EmbarkGameBoot/1.0 (Windows; 10.0.26100.1.256.64bit)',
-    },
-  });
+  console.log('[Embark] exchanging token for provider:', providerName);
+  console.log('[Embark] provider_token preview:', String(providerToken).slice(0, 80) + '...');
+  console.log('[Embark] posting to:', EMBARK_AUTH_URL);
+
+  let response;
+  try {
+    response = await axios.post(EMBARK_AUTH_URL, params.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent':   'EmbarkGameBoot/1.0 (Windows; 10.0.26100.1.256.64bit)',
+      },
+    });
+  } catch (err) {
+    const status = err.response?.status;
+    const body   = err.response?.data;
+    console.error('[Embark] HTTP error', status, JSON.stringify(body));
+    throw new Error(`Embark HTTP ${status}: ${JSON.stringify(body)}`);
+  }
 
   if (response.data.error) {
+    console.error('[Embark] error in response:', JSON.stringify(response.data));
     throw new Error(`Embark rejected: ${response.data.error_description || response.data.error}`);
   }
 
+  console.log('[Embark] token exchange SUCCESS');
   return response.data;
 }
 
