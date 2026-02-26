@@ -1,17 +1,11 @@
 /**
- * Steam → Embark Auth flow (corrected)
+ * Steam auth via id.embark.games (correct flow)
  *
- * Instead of doing our own Steam OpenID + manual token exchange,
- * we redirect the user through Embark's own Steam login flow.
- * Embark handles the Steam ticket internally and issues a Pioneer JWT.
- * We capture that JWT from the final redirect back to our callback.
- *
- * Flow:
- *   1. User hits /auth/steam
- *   2. We redirect to Embark's Steam login URL (auth.embark.net)
- *   3. Embark redirects to Steam, user logs in
- *   4. Steam redirects back to auth.embark.net
- *   5. Embark issues a Pioneer JWT and redirects to OUR callback with the token
+ * 1. GET  /auth/steam           → redirect to id.embark.games/api/auth/login?provider=steam
+ * 2. User logs in on Steam
+ * 3. GET  /auth/steam/callback  → call id.embark.games/api/auth/session to get Embark token
+ * 4. POST auth.embark.net/oauth2/token with embark token → Pioneer JWT
+ * 5. Store Pioneer JWT in Supabase, set session
  */
 
 const express = require('express');
@@ -27,170 +21,183 @@ function getBase(req) {
   return `${proto}://${req.get('host')}`;
 }
 
-// ── STEP 1: Redirect through Embark's Steam login ─────────────
+// ── STEP 1: Redirect to Embark's Steam login ─────────────────
 router.get('/', (req, res) => {
-  const state = crypto.randomBytes(16).toString('hex');
-  req.session.steamState = state;
+  const base     = getBase(req);
+  const callback = encodeURIComponent(`${base}/auth/steam/callback`);
 
-  const base = getBase(req);
-  const returnTo = encodeURIComponent(`${base}/auth/steam/callback`);
+  // id.embark.games handles the full Steam OpenID flow internally
+  const loginUrl = `https://id.embark.games/api/auth/login?provider=steam&skip_link=false&link_code=&redirect_to=${callback}`;
 
-  // This is the URL Embark uses for their own Steam login —
-  // it goes Steam → auth.embark.net → back to us with the Pioneer token
-  const embarkSteamUrl =
-    `https://auth.embark.net/oauth2/authorize` +
-    `?client_id=embark-pioneer` +
-    `&response_type=token` +
-    `&external_provider_name=steam` +
-    `&redirect_uri=${returnTo}` +
-    `&state=${state}`;
-
-  console.log('[Steam] Redirecting to Embark Steam login:', embarkSteamUrl);
-  res.redirect(embarkSteamUrl);
+  console.log('[Steam] → Embark login URL:', loginUrl);
+  res.redirect(loginUrl);
 });
 
-// ── STEP 2: Embark redirects back with token in URL fragment ──
-// Tokens arrive as URL hash fragments (#access_token=...) which are
-// not sent to the server — so we serve a small HTML page that extracts
-// the fragment and POSTs it to our backend.
-router.get('/callback', (req, res) => {
-  // Check if token came as query param (some flows use this)
-  const { access_token, state, error, code } = req.query;
-
+// ── STEP 2: Embark redirects back here after Steam login ──────
+router.get('/callback', async (req, res) => {
+  const { error } = req.query;
   if (error) {
-    console.error('[Steam] Embark returned error:', error);
-    return res.redirect(`/?error=steam_embark_${encodeURIComponent(error)}`);
+    console.error('[Steam] callback error param:', error);
+    return res.redirect(`/?error=steam_${encodeURIComponent(error)}`);
   }
 
-  // Token in query string — handle directly
-  if (access_token) {
-    return handleToken(req, res, access_token);
-  }
+  console.log('[Steam] callback hit, query:', JSON.stringify(req.query));
 
-  // Token might be in URL fragment — serve JS to extract and POST it
+  // Serve a page that:
+  // 1. Calls id.embark.games/api/auth/session (needs the cookie Embark just set)
+  // 2. POSTs the accessToken back to our server
   res.send(`<!DOCTYPE html>
 <html>
-<head><title>Authenticating...</title></head>
+<head><title>Completing login...</title>
+<style>body{background:#080b0f;color:#00e5ff;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}</style>
+</head>
 <body>
+<div id="msg">Completing Steam authentication...</div>
 <script>
-  // Extract token from hash fragment or query string
-  const hash   = location.hash.slice(1);
-  const params = new URLSearchParams(hash || location.search);
-  const token  = params.get('access_token');
-  const code   = params.get('code');
-  const error  = params.get('error');
+async function complete() {
+  try {
+    // Fetch Embark session — cookie from id.embark.games must be present
+    const sessionResp = await fetch('https://id.embark.games/api/auth/session', {
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' }
+    });
 
-  if (error) {
-    location.href = '/?error=steam_' + encodeURIComponent(error);
-  } else if (token) {
-    fetch('/auth/steam/token', {
+    if (!sessionResp.ok) {
+      throw new Error('Session fetch failed: ' + sessionResp.status);
+    }
+
+    const session = await sessionResp.json();
+    console.log('Embark session:', JSON.stringify(session));
+
+    if (!session.accessToken) {
+      throw new Error('No accessToken in session: ' + JSON.stringify(session));
+    }
+
+    // POST the Embark token to our backend for Pioneer exchange
+    const exchangeResp = await fetch('/auth/steam/exchange', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ access_token: token }),
-      credentials: 'include'
-    }).then(r => r.json()).then(d => {
-      location.href = d.ok ? '/?auth=success' : '/?error=' + encodeURIComponent(d.error || 'unknown');
+      credentials: 'include',
+      body: JSON.stringify({
+        embarkToken:   session.accessToken,
+        embarkUserId:  session.embarkUserId,
+      })
     });
-  } else if (code) {
-    fetch('/auth/steam/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: code }),
-      credentials: 'include'
-    }).then(r => r.json()).then(d => {
-      location.href = d.ok ? '/?auth=success' : '/?error=' + encodeURIComponent(d.error || 'unknown');
-    });
-  } else {
-    // Nothing in fragment or query — show debug info
-    document.body.innerHTML = '<pre>No token found.\\nHash: ' + location.hash + '\\nSearch: ' + location.search + '</pre>';
+
+    const result = await exchangeResp.json();
+    if (result.ok) {
+      location.href = '/?auth=success';
+    } else {
+      document.getElementById('msg').textContent = 'Error: ' + result.error;
+      setTimeout(() => location.href = '/?error=' + encodeURIComponent(result.error), 2000);
+    }
+  } catch(e) {
+    console.error('Auth completion error:', e);
+    document.getElementById('msg').textContent = 'Error: ' + e.message;
+    setTimeout(() => location.href = '/?error=' + encodeURIComponent(e.message), 3000);
   }
+}
+complete();
 </script>
-<p>Completing login...</p>
 </body>
 </html>`);
 });
 
-// ── STEP 3a: Receive token POSTed from fragment extractor ─────
-router.post('/token', async (req, res) => {
-  const { access_token, code } = req.body;
+// ── STEP 3: Receive Embark token, exchange for Pioneer JWT ────
+router.post('/exchange', async (req, res) => {
+  const { embarkToken, embarkUserId } = req.body;
 
-  if (access_token) {
-    try {
-      await saveSession(req, access_token);
-      return res.json({ ok: true });
-    } catch (e) {
-      console.error('[Steam] saveSession error:', e.message);
-      return res.status(500).json({ error: e.message });
-    }
+  if (!embarkToken) {
+    return res.status(400).json({ error: 'No embarkToken provided' });
   }
 
-  if (code) {
-    // Exchange code for token via Embark
-    try {
-      const base = getBase(req);
-      const resp = await axios.post('https://auth.embark.net/oauth2/token', new URLSearchParams({
-        grant_type:   'authorization_code',
-        code:          code,
-        redirect_uri:  `${base}/auth/steam/callback`,
-        client_id:     process.env.EMBARK_CLIENT_ID || 'embark-pioneer',
-        client_secret: process.env.EMBARK_CLIENT_SECRET || '+GoAQg2vzgcohjnW0PKtfiMjLfvSTfcjsyJ8YqH3DuE=',
-      }).toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-      });
-      await saveSession(req, resp.data.access_token);
-      return res.json({ ok: true });
-    } catch (e) {
-      console.error('[Steam] code exchange error:', e.response?.data || e.message);
-      return res.status(500).json({ error: JSON.stringify(e.response?.data || e.message) });
-    }
-  }
+  console.log('[Steam] Exchanging Embark token for Pioneer JWT...');
+  console.log('[Steam] embarkUserId:', embarkUserId);
+  console.log('[Steam] embarkToken preview:', embarkToken.slice(0, 60) + '...');
 
-  res.status(400).json({ error: 'No token or code provided' });
+  try {
+    // Exchange the Embark identity token for a Pioneer-specific JWT
+    const params = new URLSearchParams({
+      grant_type:              'client_credentials',
+      external_provider_name:  'embark',        // using Embark token as provider
+      external_provider_token:  embarkToken,
+      nick_name:               'Player',
+      audience:                'https://pioneer.embark.net/',
+      app_id:                  '1808500',
+      tenancy:                 'pioneer-live',
+      client_id:               process.env.EMBARK_CLIENT_ID  || 'embark-pioneer',
+      client_secret:           process.env.EMBARK_CLIENT_SECRET || '+GoAQg2vzgcohjnW0PKtfiMjLfvSTfcjsyJ8YqH3DuE=',
+    });
+
+    let pioneerToken;
+
+    try {
+      const resp = await axios.post(
+        process.env.EMBARK_AUTH_URL || 'https://auth.embark.net/oauth2/token',
+        params.toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'EmbarkGameBoot/1.0 (Windows; 10.0.26100.1.256.64bit)' } }
+      );
+      console.log('[Steam] Pioneer exchange response:', JSON.stringify(resp.data).slice(0, 200));
+      pioneerToken = resp.data.access_token;
+    } catch (exchangeErr) {
+      // Log the error but also try using the Embark token directly against Pioneer API
+      console.error('[Steam] Pioneer exchange failed:', exchangeErr.response?.status, JSON.stringify(exchangeErr.response?.data));
+      console.log('[Steam] Trying Embark token directly against Pioneer API...');
+
+      // Test if the embarkToken itself works on Pioneer API
+      const testResp = await axios.get(
+        `${process.env.PIONEER_BASE_URL || 'https://api-gateway.europe.es-pio.net/v1/pioneer'}/inventory`,
+        {
+          headers: {
+            'Authorization': `Bearer ${embarkToken}`,
+            'Accept': '*/*',
+            'Content-Type': 'application/json',
+            'User-Agent': 'PioneerGame/pioneer_1.13.x-CL-1086629 (http-legacy) Windows/10.0.26200.1.256.64bit',
+            'x-embark-manifest-id': '8916105720306122915',
+            'x-embark-telemetry-uuid': 'd6fuae266on9i72dg9o0',
+            'x-embark-telemetry-client-platform': '1',
+          }
+        }
+      );
+      console.log('[Steam] Direct Pioneer test status:', testResp.status);
+      // If we get here, embarkToken works directly!
+      pioneerToken = embarkToken;
+    }
+
+    if (!pioneerToken) {
+      throw new Error('No Pioneer token obtained');
+    }
+
+    const expiresAt = parseTokenExpiry(pioneerToken) || new Date(Date.now() + 3600000);
+
+    let embarkId = embarkUserId || null;
+    try {
+      const payload = JSON.parse(Buffer.from(pioneerToken.split('.')[1], 'base64url').toString());
+      console.log('[Steam] Pioneer JWT payload keys:', Object.keys(payload).join(', '));
+      embarkId = payload.sub || embarkId;
+    } catch {}
+
+    const user = await upsertUser({
+      platformId:     embarkUserId || embarkId || 'unknown',
+      platform:       'steam',
+      displayName:    `Steam_${(embarkId || 'player').slice(-6)}`,
+      pioneerToken,
+      tokenExpiresAt: expiresAt.toISOString(),
+      embarkId,
+    });
+
+    req.session.userId      = user.id;
+    req.session.platform    = 'steam';
+    req.session.embarkId    = embarkId;
+    req.session.displayName = user.display_name;
+
+    console.log('[Steam] ✅ Auth complete. Embark ID:', embarkId);
+    res.json({ ok: true });
+
+  } catch (e) {
+    console.error('[Steam] /exchange error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
-
-// ── Helper: direct token in query string ──────────────────────
-async function handleToken(req, res, token) {
-  try {
-    await saveSession(req, token);
-    res.redirect('/?auth=success');
-  } catch (e) {
-    console.error('[Steam] handleToken error:', e.message);
-    res.redirect(`/?error=${encodeURIComponent(e.message)}`);
-  }
-}
-
-// ── Helper: save Pioneer token to DB + session ────────────────
-async function saveSession(req, pioneerToken) {
-  console.log('[Steam] Saving token, preview:', pioneerToken.slice(0, 40) + '...');
-
-  const expiresAt = parseTokenExpiry(pioneerToken) || new Date(Date.now() + 3600000);
-
-  let embarkId = null;
-  let steamId  = null;
-  try {
-    const payload = JSON.parse(Buffer.from(pioneerToken.split('.')[1], 'base64url').toString());
-    console.log('[Steam] JWT payload keys:', Object.keys(payload).join(', '));
-    embarkId = payload.sub || null;
-    steamId  = payload.steam_id || payload.ext?.steam_id || embarkId;
-  } catch (e) {
-    console.error('[Steam] JWT parse error:', e.message);
-  }
-
-  const user = await upsertUser({
-    platformId:     steamId || embarkId || 'unknown',
-    platform:       'steam',
-    displayName:    `Steam_${(embarkId || 'player').slice(-6)}`,
-    pioneerToken,
-    tokenExpiresAt: expiresAt.toISOString(),
-    embarkId,
-  });
-
-  req.session.userId      = user.id;
-  req.session.platform    = 'steam';
-  req.session.embarkId    = embarkId;
-  req.session.displayName = user.display_name;
-
-  console.log('[Steam] ✅ Session saved. Embark ID:', embarkId);
-}
 
 module.exports = router;
