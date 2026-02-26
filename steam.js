@@ -13,10 +13,21 @@ const { upsertUser } = require('./db');
 
 const STEAM_PROVIDER = 'https://steamcommunity.com/openid';
 
+function getBase(req) {
+  // Always prefer the explicit BASE_URL env var (set this in Railway!)
+  if (process.env.BASE_URL) {
+    return process.env.BASE_URL.replace(/\/$/, ''); // strip trailing slash
+  }
+  // Fallback: trust X-Forwarded-Proto from Railway's proxy
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  return `${proto}://${req.get('host')}`;
+}
+
 function makeRelyingParty(req) {
-  const base = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const base = getBase(req);
+  console.log(`[Steam] RelyingParty base: ${base}`);
   return new openid.RelyingParty(
-    `${base}/auth/steam/callback`,  // return_to
+    `${base}/auth/steam/callback`,  // return_to — must be https on Railway
     base,                           // realm
     true,                           // stateless
     false,                          // strict

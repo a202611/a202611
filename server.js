@@ -5,7 +5,6 @@ const cors         = require('cors');
 const cookieParser = require('cookie-parser');
 const path         = require('path');
 
-// Flat imports — all files are at repo root
 const steamRouter = require('./steam');
 const epicRouter  = require('./epic');
 const xboxRouter  = require('./xbox');
@@ -14,6 +13,11 @@ const apiRouter   = require('./api');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+
+// ── TRUST RAILWAY'S REVERSE PROXY ───────────────────────────
+// Without this, req.protocol is 'http' even though Railway serves https.
+// Steam OpenID rejects http return_to URLs — this fixes that.
+app.set('trust proxy', 1);
 
 // ── MIDDLEWARE ───────────────────────────────────────────────
 app.use(express.json());
@@ -32,7 +36,7 @@ app.use(session({
   },
 }));
 
-// ── STATIC FRONTEND (serves index.html) ─────────────────────
+// ── STATIC FRONTEND ──────────────────────────────────────────
 app.use(express.static(path.join(__dirname)));
 
 // ── AUTH ROUTES ──────────────────────────────────────────────
@@ -64,21 +68,21 @@ app.post('/logout', (req, res) => {
 app.get('/health', (_req, res) => res.json({ status: 'ok', ts: Date.now() }));
 
 // ── CATCH-ALL → index.html ───────────────────────────────────
-app.get('*', (req, res) => {
+app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// ── AUTH MIDDLEWARE (exported for use in api.js) ─────────────
+// ── AUTH MIDDLEWARE ───────────────────────────────────────────
 function requireAuth(req, res, next) {
-  if (!req.session?.userId) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
+  if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
   next();
 }
 
 module.exports = { requireAuth };
 
 app.listen(PORT, () => {
+  const base = process.env.BASE_URL || `http://localhost:${PORT}`;
   console.log(`\n🚀 Pioneer Auth running on port ${PORT}`);
-  console.log(`   BASE_URL: ${process.env.BASE_URL || 'http://localhost:' + PORT}`);
+  console.log(`   URL: ${base}`);
+  console.log(`   Steam callback: ${base}/auth/steam/callback`);
 });
